@@ -1,26 +1,31 @@
-local function run(msg, patterns)
-   local response_body = {}
-   local request_constructor = {
-      url = patterns[1],
-      method = "HEAD",
-      sink = ltn12.sink.table(response_body),
-      headers = {},
-      redirect = false
-   }
-
-   local ok, response_code, response_headers, response_status_line = http.request(request_constructor)
-   if ok and response_headers.location then
-      return " 👍 " .. response_headers.location
-   else
-      return "Can't expand the url."
-   end
+local function save_value(msg, name, value)
+  if (not name or not value) then
+    return "Usage: !set var_name value"
+  end
+  local hash = nil
+  if msg.to.type == 'chat' or msg.to.type == 'channel'  then
+    hash = 'chat:'..msg.to.id..':variables'
+  end
+  if hash then
+    redis:hset(hash, name, value)
+    return "Saved "..name
+  end
+end
+local function run(msg, matches)
+  if not is_momod(msg) then
+    return "For moderators only!"
+  end
+  local name = string.sub(matches[1], 1, 50)
+  local value = string.sub(matches[2], 1, 1000)
+  local name1 = user_print_name(msg.from)
+  savelog(msg.to.id, name1.." ["..msg.from.id.."] saved ["..name.."] as > "..value )
+  local text = save_value(msg, name, value)
+  return text
 end
 
 return {
-   description = "Expand a shortened URL to the original one.",
-   usage = "!expand [url]: Return the original URL",
-   patterns = {
-      "^!expand (https?://[%w-_%.%?%.:/%+=&]+)$"
-   },
-   run = run
+  patterns = {
+   "^[#!/]save ([^%s]+) (.+)$"
+  }, 
+  run = run 
 }

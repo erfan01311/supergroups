@@ -1,51 +1,81 @@
-local function get_variables_hash(msg)
-  if msg.to.type == 'chat' then
-    return 'chat:'..msg.to.id..':variables'
-  end
-  if msg.to.type == 'user' then
-    return 'user:'..msg.from.id..':variables'
-  end
-end 
+do
 
-local function list_variables(msg)
-  local hash = get_variables_hash(msg)
-  
-  if hash then
-    local names = redis:hkeys(hash)
-    local text = ''
-    for i=1, #names do
-      text = text..names[i]..'\n'
-    end
-    return text
-  end
+local function get_message_callback (extra , success, result)
+	if result.service then
+		local action = result.action.type
+		if action == 'chat_add_user' or action == 'chat_del_user' or action == 'chat_rename' or action == 'chat_change_photo' then
+			if result.action.user then 
+				user_id = result.action.user.peer_id
+			end
+		end
+	else
+		user_id = result.from.peer_id
+	end
+	local receiver = extra.receiver
+	local hash = "whitelist"
+	local is_whitelisted = redis:sismember(hash, user_id)      
+	if is_whitelisted then
+		redis:srem(hash, user_id)
+		send_large_msg(receiver, "User/Bot ["..user_id.."] removed from whitelist")
+	else
+		redis:sadd(hash, user_id)
+		send_large_msg(receiver, "User/Bot ["..user_id.."] added to whitelist")
+	end
+	
 end
 
-local function get_value(msg, var_name)
-  local hash = get_variables_hash(msg)
-  if hash then
-    local value = redis:hget(hash, var_name)
-    if not value then
-      return'Not found, use "!get" to list variables'
-    else
-      return var_name..' => '..value
-    end
-  end
+local function whitelist_res (extra, success, result)
+	local user_id = result.peer_id
+	local receiver = extra.receiver
+	local hash = "whitelist"
+	local is_whitelisted = redis:sismember(hash, user_id)      
+	if is_whitelisted then
+		redis:srem(hash, user_id)
+		send_large_msg(receiver, "User/Bot ["..user_id.."] removed from whitelist")
+	else
+		redis:sadd(hash, user_id)
+		send_large_msg(receiver, "User/Bot ["..user_id.."] added to whitelist")
+	end
 end
 
-local function run(msg, matches)
-  if matches[2] then
-    return get_value(msg, matches[2])
-  else
-    return list_variables(msg)
-  end
+local function run (msg, matches)
+if matches[1] == "whitelist" and is_admin1(msg) then
+    local hash = "whitelist"
+    local user_id = ""
+	if type(msg.reply_id) ~= "nil" then
+		local receiver = get_receiver(msg)
+		get_message(msg.reply_id, get_message_callback, {receiver = receiver})
+    elseif string.match(matches[2], '^%d+$') then
+		local user_id = matches[2]
+		local is_whitelisted = redis:sismember(hash, user_id)      
+		if is_whitelisted then
+			redis:srem(hash, user_id)
+			return "User/Bot ["..user_id.."] removed from whitelist"
+		else
+			redis:sadd(hash, user_id)
+			return "User/Bot ["..user_id.."] added to whitelist"
+		end
+	elseif not string.match(matches[2], '^%d+$') then
+		local receiver = get_receiver(msg)
+		local username = matches[2]
+		local username = string.gsub(matches[2], '@', '')
+		resolve_username(username, whitelist_res, {receiver = receiver})
+	end
+end
+
+	if matches[1] == "clean" and matches[2] == 'whitelist' and is_admin1(msg) then
+		local hash =  'whitelist'
+			redis:del(hash)
+		return "Whitelist Cleaned"
+	end
 end
 
 return {
-  description = "Retrieves variables saved with !set", 
-  usage = "!get (value_name): Returns the value_name value.",
-  patterns = {
-    "^(!get) (.+)$",
-    "^!get$"
-  },
-  run = run
+    patterns = {
+	  "^[#!/](whitelist)$",
+      "^[#!/](whitelist) (.*)$",
+	  "^[#!/](clean) (.*)$"
+    },
+    run = run
 }
+end

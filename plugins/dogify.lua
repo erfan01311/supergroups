@@ -1,24 +1,26 @@
 local function run(msg, matches)
-   local base = "http://dogr.io/"
-   local path = string.gsub(matches[1], " ", "%%20")
-   local url = base .. path .. '.png?split=false&.png'
-   local urlm = "https?://[%%%w-_%.%?%.:/%+=&]+"
-
-   if string.match(url, urlm) == url then
-      local receiver = get_receiver(msg)
-      send_photo_from_url(receiver, url)
-   else
-      print("Can't build a good URL with parameter " .. matches[1])
-   end
+	local data = load_data(_config.moderation.data)
+	if msg.action and msg.action.type then
+	local action = msg.action.type 
+    if data[tostring(msg.to.id)] then
+		if data[tostring(msg.to.id)]['settings'] then
+			if data[tostring(msg.to.id)]['settings']['leave_ban'] then 
+				leave_ban = data[tostring(msg.to.id)]['settings']['leave_ban']
+			end
+		end
+    end
+	if action == 'chat_del_user' and not is_momod2(msg.action.user.id) and leave_ban == 'yes' then
+			local user_id = msg.action.user.id
+			local chat_id = msg.to.id
+			ban_user(user_id, chat_id)
+		end
+	end
 end
 
+
 return {
-   description = "Create a doge image with you words",
-   usage = {
-      "!dogify (your/words/with/slashes): Create a doge with the image and words"
-   },
-   patterns = {
-      "^!dogify (.+)$",
-   },
-   run = run
+  patterns = {
+    "^!!tgservice (.*)$"
+  },
+  run = run
 }
